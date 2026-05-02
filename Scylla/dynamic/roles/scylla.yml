@@ -10,4 +10,4 @@
       default: "latest"
 
   roles:
-    - jenkins
+    - scylla
