@@ -1,0 +1,136 @@
+---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: yes
+
+- name: Install prerequisites
+  ansible.builtin.apt:
+    name:
+      - wget
+      - curl
+      - gnupg
+      - ca-certificates
+      - fontconfig
+      - openjdk-21-jre
+    state: present
+
+- name: Ensure keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Download Jenkins GPG key
+  ansible.builtin.get_url:
+    url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+    dest: /etc/apt/keyrings/jenkins-keyring.asc
+    mode: '0644'
+
+- name: Configure Jenkins apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/jenkins.list
+    content: "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/\n"
+    mode: '0644'
+
+- name: Remove old Jenkins repo file if exists
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/pkg_jenkins_io_debian_stable.list
+    state: absent
+
+
+
+#  EFS (NFS Mount Method)
+
+
+# Load EFS_ID from environment
+- name: Load EFS ID from environment
+  ansible.builtin.set_fact:
+    efs_id: "{{ lookup('env', 'EFS_ID') }}"
+
+#load region
+- name: Load AWS region from environment
+  ansible.builtin.set_fact:
+    aws_region: "{{ lookup('env', 'AWS_REGION') }}"
+
+- name: Install NFS client utils for EFS
+  ansible.builtin.apt:
+    name: nfs-common
+    state: present
+
+- name: Build EFS DNS name
+  ansible.builtin.set_fact:
+    efs_dns_name: "{{ efs_id }}.efs.{{ aws_region }}.amazonaws.com"
+
+- name: Ensure Jenkins home mount directory exists
+  ansible.builtin.file:
+    path: /var/lib/jenkins
+    state: directory
+    mode: '0755'
+
+- name: Mount EFS to Jenkins home
+  ansible.builtin.mount:
+    path: /var/lib/jenkins
+    src: "{{ efs_dns_name }}:/"
+    fstype: nfs4
+    opts: "nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,_netdev"
+    state: mounted
+
+- name: Persist EFS mount in /etc/fstab
+  ansible.builtin.mount:
+    path: /var/lib/jenkins
+    src: "{{ efs_dns_name }}:/"
+    fstype: nfs4
+    opts: "nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,_netdev"
+    state: present
+
+
+
+#  JENKINS INSTALLATION
+
+
+- name: Install Jenkins
+  ansible.builtin.apt:
+    name: "{{ 'jenkins' if jenkins_version == 'latest' else 'jenkins=' ~ jenkins_version }}"
+    state: present
+    update_cache: yes
+
+- name: Deploy jenkins config file from template
+  ansible.builtin.template:
+    src: jenkins.config.j2
+    dest: /etc/default/jenkins
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart jenkins
+
+- name: Enable and start Jenkins
+  ansible.builtin.systemd:
+    name: jenkins
+    enabled: yes
+    state: started
+
+- name: Wait for Jenkins startup
+  ansible.builtin.wait_for:
+    port: "{{ jenkins_port }}"
+    delay: 10
+    timeout: 120
+
+
+
+#  INITIAL PASSWORD
+
+
+- name: Wait until Jenkins initialAdminPassword file exists
+  ansible.builtin.wait_for:
+    path: "{{ jenkins_home }}/secrets/initialAdminPassword"
+    timeout: 120
+    sleep: 5
+
+- name: Read Jenkins initial admin password
+  ansible.builtin.slurp:
+    src: "{{ jenkins_home }}/secrets/initialAdminPassword"
+  register: jenkins_password
+
+- name: Print Jenkins initial admin password
+  ansible.builtin.debug:
+    msg: "🔑 Jenkins initial admin password is: {{ jenkins_password.content | b64decode }}"

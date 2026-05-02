@@ -1,0 +1,22 @@
+plugin: amazon.aws.aws_ec2
+regions:
+  - ap-south-1
+#boto_profile: myprofile
+
+# Grouping based on tags
+keyed_groups:
+  - key: tags.OS
+    prefix: os
+  - key: tags.Name
+    prefix: tag
+
+# Which hostname to use for Ansible
+hostnames:
+  - private-ip-address
+
+compose:
+  ansible_host: private_ip_address
+
+vars:
+  ansible_user: ubuntu
+  ansible_ssh_private_key_file: /var/lib/jenkins/keys/server2.pem

@@ -1,0 +1,13 @@
+---
+- name: Install and Configure Jenkins
+  hosts: tag_jenkins_jenkins
+  become: yes
+
+  vars_prompt:
+    - name: jenkins_version
+      prompt: "Enter Jenkins version (latest / 2.440.1 / 2.426.3 / 2.414.3)"
+      private: no
+      default: "latest"
+
+  roles:
+    - jenkins
