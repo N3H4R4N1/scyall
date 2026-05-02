@@ -1,0 +1,174 @@
+# =========================
+# Install base dependencies
+# =========================
+- name: Install dependencies
+  apt:
+    name:
+      - curl
+      - gnupg
+      - lsb-release
+    state: present
+    update_cache: yes
+
+# =========================
+# Enable Ubuntu repos
+# =========================
+- name: Enable main repo
+  apt_repository:
+    repo: "deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }} main"
+    state: present
+
+- name: Enable universe repo
+  apt_repository:
+    repo: "deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }} universe"
+    state: present
+
+- name: Enable updates repo
+  apt_repository:
+    repo: "deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }}-updates main universe"
+    state: present
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+
+# =========================
+# Install Java (Scylla tools need it)
+# =========================
+- name: Install Java
+  apt:
+    name: openjdk-21-jdk
+    state: present
+
+# =========================
+# Add Scylla repository
+# =========================
+- name: Download Scylla repo script
+  get_url:
+    url: https://get.scylladb.com/server
+    dest: /tmp/scylla-repo.sh
+    mode: '0755'
+
+- name: Run Scylla repo script
+  command: bash /tmp/scylla-repo.sh
+  args:
+    creates: /etc/apt/sources.list.d/scylla.list
+
+- name: Update apt cache after repo
+  apt:
+    update_cache: yes
+
+# =========================
+# Install ScyllaDB
+# =========================
+- name: Install Scylla
+  apt:
+    name: scylla
+    state: present
+
+# =========================
+# Create required directories (IMPORTANT FIX)
+# =========================
+- name: Create Scylla directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: scylla
+    group: scylla
+    mode: '0755'
+  loop:
+    - /var/lib/scylla/data
+    - /var/lib/scylla/commitlog
+    - /var/lib/scylla/saved_caches
+    - /var/lib/scylla/hints
+
+# =========================
+# Deploy scylla.yaml
+# =========================
+- name: Copy scylla.yaml
+  template:
+    src: scylla.yaml.j2
+    dest: /etc/scylla/scylla.yaml
+    owner: scylla
+    group: scylla
+    mode: '0644'
+
+# =========================
+# IO setup (must come AFTER directories)
+# =========================
+- name: Run Scylla IO setup (non-interactive)
+  shell: yes | scylla_io_setup --ami
+  become: true
+
+# =========================
+# Enable developer mode (IMPORTANT FIX)
+# =========================
+- name: Enable Scylla dev mode (required for small EC2)
+  copy:
+    dest: /etc/scylla.d/dev-mode.conf
+    content: |
+      SCYLLA_ARGS="--developer-mode 1 --smp 1 --memory 512M"
+# =========================
+# Restart Scylla
+# =========================
+- name: Restart Scylla
+  systemd:
+    name: scylla-server
+    state: restarted
+    enabled: yes
+
+# =========================
+# Wait for Scylla to be ready
+# =========================
+- name: Wait for Scylla port
+  wait_for:
+    port: 9042
+    delay: 10
+    timeout: 120
+
+# =========================
+# Initialize DB
+# =========================
+# =========================
+# Initialize DB (FIXED)
+# =========================
+# =========================
+# Bootstrap password change
+# =========================
+- name: Set cassandra password (bootstrap only)
+  shell: |
+    cqlsh -u cassandra -p {{ scylla_password }} -e "ALTER USER cassandra WITH PASSWORD '{{ scylla_password }}';"
+  ignore_errors: yes
+
+# =========================
+# Create keyspace
+# =========================
+- name: Create keyspace
+  shell: |
+    cqlsh -u cassandra -p {{ scylla_password }} <<EOF
+    CREATE KEYSPACE IF NOT EXISTS {{ scylla_keyspace }}
+    WITH replication = {
+      'class': 'SimpleStrategy',
+      'replication_factor': 1
+    };
+    EOF
+
+# =========================
+# Create application user
+# =========================
+- name: Create application user
+  shell: |
+    cqlsh -u cassandra -p {{ scylla_password }} <<EOF
+    CREATE USER IF NOT EXISTS {{ scylla_user }}
+    WITH PASSWORD '{{ scylla_password }}'
+    NOSUPERUSER;
+    EOF
+
+# =========================
+# Grant permissions
+# =========================
+- name: Grant permissions
+  shell: |
+    cqlsh -u cassandra -p {{ scylla_password }} <<EOF
+    GRANT ALL PERMISSIONS ON KEYSPACE {{ scylla_keyspace }} TO {{ scylla_user }};
+    EOF

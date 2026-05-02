@@ -1,0 +1,15 @@
+cluster_name: "{{ scylla_cluster_name | default('prod-cluster') }}"
+
+listen_address: "{{ ansible_default_ipv4.address }}"
+rpc_address: 0.0.0.0
+broadcast_rpc_address: "{{ ansible_default_ipv4.address }}"
+
+seed_provider:
+  - class_name: org.apache.cassandra.locator.SimpleSeedProvider
+    parameters:
+      - seeds: "{{ ansible_default_ipv4.address }}"
+
+endpoint_snitch: Ec2Snitch
+
+authenticator: PasswordAuthenticator
+authorizer: CassandraAuthorizer

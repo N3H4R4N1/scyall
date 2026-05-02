@@ -1,0 +1,7 @@
+scylla_version: "5.4"
+scylla_password: "12345"
+scylla_keyspace: "attendance_db"
+scylla_user: "scylla"
+scylla_cluster_name: "prod-cluster"
+scylla_listen_address: "{{ ansible_default_ipv4.address }}"
+scylla_rpc_address: "0.0.0.0"
