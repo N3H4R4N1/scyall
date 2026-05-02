@@ -135,9 +135,14 @@
 # =========================
 # Bootstrap password change
 # =========================
-- name: Set cassandra password (bootstrap only)
+# - name: Set cassandra password (bootstrap only)
+#   shell: |
+#     cqlsh -u cassandra -p {{ scylla_password }} -e "ALTER USER cassandra WITH PASSWORD '{{ scylla_password }}';"
+#   ignore_errors: yes
+
+- name: Set cassandra password first time
   shell: |
-    cqlsh -u cassandra -p {{ scylla_password }} -e "ALTER USER cassandra WITH PASSWORD '{{ scylla_password }}';"
+    cqlsh -u cassandra -p cassandra -e "ALTER USER cassandra WITH PASSWORD '{{ scylla_password }}';"
   ignore_errors: yes
 
 # =========================
