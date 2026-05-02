@@ -1,2 +1,12 @@
+---
 ansible_user: ubuntu
-ansible_ssh_private_key_file: /var/lib/jenkins/keys/server2.pem
+ansible_ssh_private_key_file: ~/.ssh/scylla-key.pem
+ansible_python_interpreter: /usr/bin/python3
+
+scylla_version: "5.4"
+scylla_password: "12345"
+scylla_keyspace: "attendance_db"
+scylla_user: "scylla"
+scylla_cluster_name: "dev-scylla-cluster"
+scylla_listen_address: "{{ ansible_default_ipv4.address }}"
+scylla_rpc_address: "0.0.0.0"

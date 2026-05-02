@@ -1,22 +1,21 @@
 plugin: amazon.aws.aws_ec2
 regions:
-  - ap-south-1
-#boto_profile: myprofile
+  - us-east-1
 
-# Grouping based on tags
+filters:
+  tag:Name: scylla-dev-server
+  tag:Environment: dev
+  tag:Role: scylla
+  instance-state-name: running
+
 keyed_groups:
-  - key: tags.OS
-    prefix: os
-  - key: tags.Name
-    prefix: tag
+  - key: tags.Role
+    prefix: role
+  - key: tags.Environment
+    prefix: env
 
-# Which hostname to use for Ansible
 hostnames:
-  - private-ip-address
+  - public-ip-address
 
 compose:
-  ansible_host: private_ip_address
-
-vars:
-  ansible_user: ubuntu
-  ansible_ssh_private_key_file: /var/lib/jenkins/keys/server2.pem
+  ansible_host: public_ip_address
